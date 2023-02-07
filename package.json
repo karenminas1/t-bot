@@ -5,7 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "if pgrep -x \"node\" > /dev/null; then killall node; fi; node src/bot.js"
   },
   "author": "",
   "license": "ISC",
