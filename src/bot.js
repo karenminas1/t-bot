@@ -5,9 +5,9 @@ const exchange = new ccxt.binance();
 
 const symbol = "BTC/USDT";
 const timeframe = "1m";
-const shortPeriod = 7;
-const longPeriod = 21;
-const volumePeriod = 7;
+const shortPeriod = 5;
+const longPeriod = 20;
+// const volumePeriod = 7;
 
 // let holding = false;
 let entryPrice = 0;
@@ -137,7 +137,6 @@ const port = process.env.PORT || 3000;
 server.listen(port, () => {
   console.log(`Server listening on port ${port}`);
   setInterval(async () => {
-    console.log("fff");
     const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
     // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
     const signal = checkSignal(
@@ -205,5 +204,3 @@ server.listen(port, () => {
 //     // console.log("Holding position...");
 //   }
 // }
-
-export { totalPNL };
