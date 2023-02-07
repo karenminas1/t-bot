@@ -4,10 +4,11 @@ import ccxt from "ccxt";
 const exchange = new ccxt.binance();
 
 const symbol = "BTC/USDT";
-const timeframe = "1m";
+const timeframe = "5m";
 const shortPeriod = 5;
 const longPeriod = 20;
-// const volumePeriod = 7;
+const volumePeriod = 7;
+const requestPeriod = 3000;
 
 // let holding = false;
 let entryPrice = 0;
@@ -138,15 +139,15 @@ server.listen(port, () => {
   console.log(`Server listening on port ${port}`);
   setInterval(async () => {
     const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
-    // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
+    const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
     const signal = checkSignal(
       prices,
       shortPeriod,
-      longPeriod
-      // isVolumeHigh(volumeData, volumePeriod)
+      longPeriod,
+      isVolumeHigh(volumeData, volumePeriod)
     );
     await executeSignal(signal);
-  }, 6000);
+  }, requestPeriod);
 });
 
 // function x(currentPrice) {
