@@ -108,6 +108,7 @@ async function executeSignal(signal) {
           unitsTraded
         )}`
       );
+      console.log("Total PNL", totalPNL);
       closeShortOrder(currentPrice);
 
       sellOrder = false;
@@ -126,6 +127,7 @@ async function executeSignal(signal) {
           unitsTraded
         )}`
       );
+      console.log("Total PNL", totalPNL);
       closeLongOrder(currentPrice);
 
       buyOrder = false;
