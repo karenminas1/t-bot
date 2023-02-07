@@ -9,7 +9,7 @@ const timeframe = "1m";
 const shortPeriod = 5;
 const longPeriod = 20;
 const volumePeriod = 7;
-const requestPeriod = 3000;
+const requestPeriod = 5000;
 
 // let holding = false;
 let entryPrice = 0;
