@@ -1,10 +1,11 @@
 import http from "http";
+import ejs from "ejs";
 import ccxt from "ccxt";
 
 const exchange = new ccxt.binance();
 
 const symbol = "BTC/USDT";
-const timeframe = "5m";
+const timeframe = "1m";
 const shortPeriod = 5;
 const longPeriod = 20;
 const volumePeriod = 7;
@@ -100,54 +101,82 @@ async function executeSignal(signal) {
     const currentPrice = await getCurrentPrice(symbol);
 
     if (sellOrder) {
+      console.log(
+        `Closing short order... | PNL  ${-calculatePNL(
+          currentPrice,
+          entryPrice,
+          unitsTraded
+        )}`
+      );
       closeShortOrder(currentPrice);
-      console.log("Closing sell order..." + "PNL" + totalPNL);
+
       sellOrder = false;
     }
 
     placeLongOrder(currentPrice, 1);
-    console.log("Executing buy signal...");
 
     buyOrder = true;
   } else if (signal === "sell" && !sellOrder) {
     const currentPrice = await getCurrentPrice(symbol);
     if (buyOrder) {
+      console.log(
+        `Closing long order... | PNL  ${calculatePNL(
+          currentPrice,
+          entryPrice,
+          unitsTraded
+        )}`
+      );
       closeLongOrder(currentPrice);
-      console.log("Closing buy order..." + "PNL" + totalPNL);
+
       buyOrder = false;
     }
 
     placeShortOrder(currentPrice, 1);
-    console.log("Executing sell signal...");
 
     sellOrder = true;
   }
 }
 
-const server = http.createServer((request, response) => {
-  response.writeHead(200, { "Content-Type": "application/json" });
-  response.write(
-    JSON.stringify({
-      "Total PNL": totalPNL,
-    })
+setInterval(async () => {
+  const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
+  // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
+  const signal = checkSignal(
+    prices,
+    shortPeriod,
+    longPeriod
+    // isVolumeHigh(volumeData, volumePeriod)
   );
-  response.end();
+  await executeSignal(signal);
+}, requestPeriod);
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/") {
+    ejs.renderFile(
+      "./src/index.ejs",
+      {
+        data: {
+          totalPNL,
+        },
+      },
+      (err, str) => {
+        if (err) {
+          res.writeHead(500, { "Content-Type": "text/plain" });
+          res.end("500 error: couldn't render file.");
+        } else {
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end(str);
+        }
+      }
+    );
+  } else {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("404 error: endpoint not found.");
+  }
 });
 
 const port = process.env.PORT || 3000;
 server.listen(port, () => {
   console.log(`Server listening on port - ${port}`);
-  setInterval(async () => {
-    const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
-    const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
-    const signal = checkSignal(
-      prices,
-      shortPeriod,
-      longPeriod,
-      isVolumeHigh(volumeData, volumePeriod)
-    );
-    await executeSignal(signal);
-  }, requestPeriod);
 });
 
 // function x(currentPrice) {
