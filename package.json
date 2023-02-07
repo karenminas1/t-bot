@@ -10,7 +10,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ccxt": "^1.93.102",
-    "talib": "^1.1.4"
+    "ccxt": "^2.6.36"
   }
 }
