@@ -120,22 +120,8 @@ async function executeSignal(signal) {
     console.log("Executing sell signal...");
 
     sellOrder = true;
-  } else {
-    console.log("Executing sell signal...");
   }
 }
-
-setInterval(async () => {
-  const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
-  // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
-  const signal = checkSignal(
-    prices,
-    shortPeriod,
-    longPeriod
-    // isVolumeHigh(volumeData, volumePeriod)
-  );
-  await executeSignal(signal);
-}, 6000);
 
 const server = http.createServer((request, response) => {
   response.writeHead(200, { "Content-Type": "application/json" });
@@ -150,6 +136,17 @@ const server = http.createServer((request, response) => {
 const port = process.env.PORT || 3000;
 server.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+  setInterval(async () => {
+    const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
+    // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
+    const signal = checkSignal(
+      prices,
+      shortPeriod,
+      longPeriod
+      // isVolumeHigh(volumeData, volumePeriod)
+    );
+    await executeSignal(signal);
+  }, 6000);
 });
 
 // function x(currentPrice) {
