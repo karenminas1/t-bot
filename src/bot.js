@@ -47,13 +47,13 @@ function isVolumeHigh(volumeData, period) {
   return volumeData[volumeData.length - 1] >= averageVolume * 1.5;
 }
 
-function checkSignal(prices, shortPeriod, longPeriod, isVolumeHigh) {
+function checkSignal(prices, shortPeriod, longPeriod) {
   const shortMA = computeMA(prices, shortPeriod);
   const longMA = computeMA(prices, longPeriod);
 
-  if (shortMA > longMA && isVolumeHigh) {
+  if (shortMA > longMA) {
     return "buy";
-  } else if (shortMA < longMA && isVolumeHigh) {
+  } else if (shortMA < longMA) {
     return "sell";
   } else {
     return "hold";
@@ -124,12 +124,12 @@ async function executeSignal(signal) {
 
 setInterval(async () => {
   const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
-  const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
+  // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
   const signal = checkSignal(
     prices,
     shortPeriod,
-    longPeriod,
-    isVolumeHigh(volumeData, volumePeriod)
+    longPeriod
+    // isVolumeHigh(volumeData, volumePeriod)
   );
   await executeSignal(signal);
 }, 6000);
