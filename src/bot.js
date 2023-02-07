@@ -1,4 +1,6 @@
+import http from "http";
 import ccxt from "ccxt";
+import fs from "fs";
 
 const exchange = new ccxt.binance();
 
@@ -122,17 +124,27 @@ async function executeSignal(signal) {
   }
 }
 
-setInterval(async () => {
-  const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
-  // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
-  const signal = checkSignal(
-    prices,
-    shortPeriod,
-    longPeriod
-    // isVolumeHigh(volumeData, volumePeriod)
-  );
-  await executeSignal(signal);
-}, 6000);
+const file = fs.readFileSync("./src/index.html", { encoding: "utf-8" });
+
+const server = http.createServer((request, response) => {
+  // response.end(file);
+  setInterval(async () => {
+    const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
+    // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
+    const signal = checkSignal(
+      prices,
+      shortPeriod,
+      longPeriod
+      // isVolumeHigh(volumeData, volumePeriod)
+    );
+    await executeSignal(signal);
+  }, 6000);
+});
+
+const port = process.env.PORT || 3000;
+server.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
 
 // function x(currentPrice) {
 //   let pnl;
