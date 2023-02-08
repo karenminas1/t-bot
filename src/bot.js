@@ -9,12 +9,14 @@ const timeframe = "1m";
 const shortPeriod = 5;
 const longPeriod = 20;
 const volumePeriod = 7;
-const requestPeriod = 5000;
+const feePercent = 0.1;
+const unitsTraded = 1;
 
-// let holding = false;
+const requestPeriod = 5000;
 let entryPrice = 0;
-let unitsTraded = 0;
 let totalPNL = 0;
+let totalTransaktionFee = 0;
+let entryTime = null;
 let buyOrder = false;
 let sellOrder = false;
 
@@ -67,33 +69,55 @@ function calculatePNL(currentPrice, entryPrice, unitsTraded) {
   return (currentPrice - entryPrice) * unitsTraded;
 }
 
-function placeLongOrder(ep, ut) {
+function placeLongOrder(ep) {
   entryPrice = ep;
-  unitsTraded = ut;
+  entryTime = getFormatedCurrentDate();
   // TODO request for long order here
-  console.log("Long order placed at " + entryPrice);
 }
 
-function placeShortOrder(ep, ut) {
+function placeShortOrder(ep) {
   entryPrice = ep;
-  unitsTraded = ut;
+  entryTime = getFormatedCurrentDate();
   // TODO request for short order here
-  console.log("Short order placed at " + entryPrice);
 }
 
 function closeShortOrder(currentPrice) {
   totalPNL += -calculatePNL(currentPrice, entryPrice, unitsTraded) ?? 0;
-  reset();
 }
 
 function closeLongOrder(currentPrice) {
   totalPNL += calculatePNL(currentPrice, entryPrice, unitsTraded) ?? 0;
-  reset();
 }
 
 function reset() {
   entryPrice = 0;
-  unitsTraded = 0;
+  entryTime = null;
+}
+
+function getFormatedCurrentDate() {
+  var d = new Date();
+  return (
+    [d.getMonth() + 1, d.getDate(), d.getFullYear()].join("/") +
+    " " +
+    [d.getHours(), d.getMinutes(), d.getSeconds()].join(":")
+  );
+}
+
+function calculateTradingFee(unitsTraded, price, feePercent) {
+  return unitsTraded * price * (feePercent / 100);
+}
+
+function accTradingFee(unitsTraded, price, feePercent) {
+  totalTransaktionFee += calculateTradingFee(unitsTraded, price, feePercent);
+}
+
+function log(type, entryPrice, currentPrice, entryTime, unitsTraded, totalPNL) {
+  const pnl = calculatePNL(currentPrice, entryPrice, unitsTraded);
+  console.log(
+    `${type} | Entry Price: ${entryPrice} | Exit Price: ${currentPrice} | PNL  ${
+      type === "SHORT" ? -pnl : pnl
+    } | Entry Time: ${entryTime} | Exit Time: ${getFormatedCurrentDate()} | Total PNL: ${totalPNL}`
+  );
 }
 
 async function executeSignal(signal) {
@@ -101,39 +125,31 @@ async function executeSignal(signal) {
     const currentPrice = await getCurrentPrice(symbol);
 
     if (sellOrder) {
-      console.log(
-        `Closing short order... | PNL  ${-calculatePNL(
-          currentPrice,
-          entryPrice,
-          unitsTraded
-        )}`
-      );
-      console.log("Total PNL", totalPNL);
       closeShortOrder(currentPrice);
+      accTradingFee(unitsTraded, currentPrice, feePercent);
+      log("SHORT", entryPrice, currentPrice, entryTime, unitsTraded, totalPNL);
+      reset();
 
       sellOrder = false;
     }
 
-    placeLongOrder(currentPrice, 1);
+    placeLongOrder(currentPrice);
+    accTradingFee(unitsTraded, currentPrice, feePercent);
 
     buyOrder = true;
   } else if (signal === "sell" && !sellOrder) {
     const currentPrice = await getCurrentPrice(symbol);
     if (buyOrder) {
-      console.log(
-        `Closing long order... | PNL  ${calculatePNL(
-          currentPrice,
-          entryPrice,
-          unitsTraded
-        )}`
-      );
-      console.log("Total PNL", totalPNL);
       closeLongOrder(currentPrice);
+      accTradingFee(unitsTraded, currentPrice, feePercent);
+      log("BUY", entryPrice, currentPrice, entryTime, unitsTraded, totalPNL);
+      reset();
 
       buyOrder = false;
     }
 
-    placeShortOrder(currentPrice, 1);
+    placeShortOrder(currentPrice);
+    accTradingFee(unitsTraded, currentPrice, feePercent);
 
     sellOrder = true;
   }
@@ -158,6 +174,7 @@ const server = http.createServer((req, res) => {
       {
         data: {
           totalPNL,
+          totalTransaktionFee,
         },
       },
       (err, str) => {
