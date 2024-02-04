@@ -1,255 +1,153 @@
-import http from "http";
-import ejs from "ejs";
-import ccxt from "ccxt";
+import "dotenv/config";
+import Binance from "node-binance-api";
 
-const exchange = new ccxt.binance();
+const apiKey = process.env.BINANCE_API_KEY;
+const apiSecret = process.env.BINANCE_API_SECRET;
 
-const symbol = "BTC/USDT";
-const timeframe = "1m";
-const shortPeriod = 5;
-const longPeriod = 20;
-const volumePeriod = 7;
-const feePercent = 0.1;
-const unitsTraded = 1;
+const binance = new Binance().options({
+  APIKEY: apiKey,
+  APISECRET: apiSecret,
+  test: true,
+});
 
-const requestPeriod = 5000;
-let entryPrice = 0;
-let totalPNL = 0;
-let totalTransaktionFee = 0;
-let entryTime = null;
-let buyOrder = false;
-let sellOrder = false;
+// Configuration
+// const symbol = "BTCUSDT";
+// const stepSizePercent = 2;
+// const firstOrderStopLossPercent = 1;
+// const subsequentOrderStopLossPercent = 0.5;
+// const maxOpenTrades = 10;
+// const orderAmount = 0.004;
+const symbol = process.env.SYMBOL;
+const stepSizePercent = process.env.STEP_SIZE_PERCENT;
+const firstOrderStopLossPercent = process.env.FIRST_ORDER_STOP_LOSS_PERCENT;
+const subsequentOrderStopLossPercent =
+  process.env.SUBSEQUENT_ORDER_STOP_LOSS_PERCENT;
+const maxOpenTrades = process.env.MAX_ORDER_TRADES;
+const orderAmount = process.env.ORDER_AMOUNT;
 
-async function getHistoricalPrices(symbol, timeframe) {
-  const ohlcv = await exchange.fetchOHLCV(symbol, timeframe);
-  return ohlcv.map((candle) => candle[4]); // return close prices
-}
+let lastOrderPrice = null;
+let stopLossLevel = null;
+let orderCount = 0;
 
-async function getVolumeData(symbol, timeframe) {
-  const candles = await exchange.fetchOHLCV(symbol, timeframe);
-  return candles.map((candle) => candle[5]); // return volume
-}
+// Utility functions
+const priceToPercent = (percent, price) => (price * percent) / 100;
 
-async function getCurrentPrice(symbol) {
-  const ticker = await exchange.fetchTicker(symbol);
+// Function to place a new order
+async function placeNewOrder(symbol, quantity) {
+  try {
+    const order = await binance.futuresMarketBuy(symbol, quantity);
 
-  return ticker.last;
-}
-
-function computeMA(prices, period) {
-  let sum = 0;
-  for (let i = 0; i < period; i++) {
-    sum += prices[prices.length - period + i];
-  }
-  return sum / period;
-}
-
-function isVolumeHigh(volumeData, period) {
-  // const averageVolume =
-  //   volumeData.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  const averageVolume = computeMA(volumeData, period);
-
-  return volumeData[volumeData.length - 1] >= averageVolume * 1.5;
-}
-
-function checkSignal(prices, shortPeriod, longPeriod) {
-  const shortMA = computeMA(prices, shortPeriod);
-  const longMA = computeMA(prices, longPeriod);
-
-  if (shortMA > longMA) {
-    return "buy";
-  } else if (shortMA < longMA) {
-    return "sell";
-  } else {
-    return "hold";
+    return order;
+  } catch (error) {
+    console.error("Error placing order:", error.body);
   }
 }
 
-function calculatePNL(currentPrice, entryPrice, unitsTraded) {
-  return (currentPrice - entryPrice) * unitsTraded;
+// Function to add a stop loss to an existing order
+async function placeStopLossOrder(symbol, quantity, stopPrice) {
+  try {
+    const stopLossOrder = await binance.futuresSell(symbol, quantity, null, {
+      stopPrice: stopPrice,
+      type: "STOP_MARKET",
+    });
+
+    return stopLossOrder;
+  } catch (error) {
+    console.error("Error placing stop-loss order:", error.body);
+  }
 }
 
-function placeLongOrder(ep) {
-  entryPrice = ep;
-  entryTime = getFormatedCurrentDate();
-  // TODO request for long order here
+// Function to fetch position
+async function fetchPosition(symbol) {
+  try {
+    const account = await binance.futuresAccount();
+    const position = account.positions.find((pos) => pos.symbol === symbol);
+
+    return position;
+  } catch (error) {
+    console.error("Error position:", error.body);
+  }
 }
 
-function placeShortOrder(ep) {
-  entryPrice = ep;
-  entryTime = getFormatedCurrentDate();
-  // TODO request for short order here
+function cutToSingleDecimal(value) {
+  return Math.floor(value * 10) / 10;
 }
 
-function closeShortOrder(currentPrice) {
-  totalPNL += -calculatePNL(currentPrice, entryPrice, unitsTraded) ?? 0;
+async function cancelAllFuturesOrders(symbol) {
+  try {
+    const response = await binance.futuresCancelAll(symbol);
+    console.log(
+      "All futures orders for the symbol have been canceled:",
+      response
+    );
+  } catch (error) {
+    console.error("Error canceling all futures orders:", error.body);
+  }
 }
 
-function closeLongOrder(currentPrice) {
-  totalPNL += calculatePNL(currentPrice, entryPrice, unitsTraded) ?? 0;
-}
+async function checkAndExecuteTrades() {
+  try {
+    const tickerPrices = await binance.futuresPrices();
+    const tickerPrice = tickerPrices[symbol];
 
-function reset() {
-  entryPrice = 0;
-  entryTime = null;
-}
-
-function getFormatedCurrentDate() {
-  var d = new Date();
-  return (
-    [d.getMonth() + 1, d.getDate(), d.getFullYear()].join("/") +
-    " " +
-    [d.getHours(), d.getMinutes(), d.getSeconds()].join(":")
-  );
-}
-
-function calculateTradingFee(unitsTraded, price, feePercent) {
-  return unitsTraded * price * (feePercent / 100);
-}
-
-function accTradingFee(unitsTraded, price, feePercent) {
-  totalTransaktionFee += calculateTradingFee(unitsTraded, price, feePercent);
-}
-
-function log(type, entryPrice, currentPrice, entryTime, unitsTraded, totalPNL) {
-  const pnl = calculatePNL(currentPrice, entryPrice, unitsTraded);
-  console.log(
-    `${type} | Entry Price: ${entryPrice} | Exit Price: ${currentPrice} | PNL  ${
-      type === "SHORT" ? -pnl : pnl
-    } | Entry Time: ${entryTime} | Exit Time: ${getFormatedCurrentDate()} | Total PNL: ${totalPNL}`
-  );
-}
-
-async function executeSignal(signal) {
-  if (signal === "buy" && !buyOrder) {
-    const currentPrice = await getCurrentPrice(symbol);
-
-    if (sellOrder) {
-      closeShortOrder(currentPrice);
-      accTradingFee(unitsTraded, currentPrice, feePercent);
-      log("SHORT", entryPrice, currentPrice, entryTime, unitsTraded, totalPNL);
-      reset();
-
-      sellOrder = false;
+    const position = await fetchPosition(symbol);
+    if (position.positionAmt !== "0.000") {
+      orderCount++;
+      lastOrderPrice = +position.entryPrice;
+    } else {
+      orderCount = 0;
+      lastOrderPrice = null;
+      lastOrderPrice = null;
     }
 
-    placeLongOrder(currentPrice);
-    accTradingFee(unitsTraded, currentPrice, feePercent);
+    if (orderCount === 0) {
+      console.log(`Game started`);
+      await placeNewOrder(symbol, orderAmount);
+      const position = await fetchPosition(symbol);
+      const entryPrice = +position.entryPrice;
 
-    buyOrder = true;
-  } else if (signal === "sell" && !sellOrder) {
-    const currentPrice = await getCurrentPrice(symbol);
-    if (buyOrder) {
-      closeLongOrder(currentPrice);
-      accTradingFee(unitsTraded, currentPrice, feePercent);
-      log("BUY", entryPrice, currentPrice, entryTime, unitsTraded, totalPNL);
-      reset();
+      stopLossLevel =
+        entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice);
 
-      buyOrder = false;
+      await placeStopLossOrder(
+        symbol,
+        position.positionAmt,
+        cutToSingleDecimal(stopLossLevel)
+      );
+
+      lastOrderPrice = entryPrice;
+      console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
+    } else if (orderCount < maxOpenTrades) {
+      if (
+        tickerPrice >=
+        lastOrderPrice + priceToPercent(stepSizePercent, lastOrderPrice)
+      ) {
+        await placeNewOrder(symbol, orderAmount);
+        const position = await fetchPosition(symbol);
+        const entryPrice = +position.entryPrice;
+
+        stopLossLevel =
+          entryPrice -
+          priceToPercent(subsequentOrderStopLossPercent, entryPrice);
+        await cancelAllFuturesOrders(symbol);
+        await placeStopLossOrder(
+          symbol,
+          position.positionAmt,
+          cutToSingleDecimal(stopLossLevel)
+        );
+        lastOrderPrice = entryPrice;
+        console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
+      }
     }
-
-    placeShortOrder(currentPrice);
-    accTradingFee(unitsTraded, currentPrice, feePercent);
-
-    sellOrder = true;
+  } catch (error) {
+    console.error(error);
   }
 }
 
 setInterval(async () => {
-  const prices = await getHistoricalPrices(symbol, timeframe); // array of historical prices
-  // const volumeData = await getVolumeData(symbol, timeframe); // array of historical prices
-  const signal = checkSignal(
-    prices,
-    shortPeriod,
-    longPeriod
-    // isVolumeHigh(volumeData, volumePeriod)
-  );
-  await executeSignal(signal);
-}, requestPeriod);
-
-const server = http.createServer((req, res) => {
-  if (req.url === "/") {
-    ejs.renderFile(
-      "./src/index.ejs",
-      {
-        data: {
-          totalPNL,
-          totalTransaktionFee,
-        },
-      },
-      (err, str) => {
-        if (err) {
-          res.writeHead(500, { "Content-Type": "text/plain" });
-          res.end("500 error: couldn't render file.");
-        } else {
-          res.writeHead(200, { "Content-Type": "text/html" });
-          res.end(str);
-        }
-      }
-    );
-  } else {
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("404 error: endpoint not found.");
+  try {
+    await checkAndExecuteTrades();
+  } catch (error) {
+    console.error(error);
   }
-});
-
-const port = process.env.PORT || 3000;
-server.listen(port, () => {
-  console.log(`Server listening on port - ${port}`);
-});
-
-// function x(currentPrice) {
-//   let pnl;
-
-//   // if (unitsTraded > 0) {
-//   // TODO request sell order here
-//   pnl = calculatePNL(currentPrice, entryPrice, unitsTraded);
-//   console.log("Sell order placed at " + currentPrice + " with PNL of " + pnl);
-//   entryPrice = 0;
-//   unitsTraded = 0;
-//   // } else {
-//   // console.log("No units to sell");
-//   // }
-
-//   return pnl ?? 0;
-// }
-
-// function placeBuyOrder(ep, ut) {
-//   entryPrice = ep;
-//   unitsTraded = ut;
-//   // TODO request buy order here
-//   console.log("Buy order placed at " + entryPrice);
-// }
-
-// function placeSellOrder(currentPrice) {
-//   let pnl;
-
-//   // if (unitsTraded > 0) {
-//   // TODO request sell order here
-//   pnl = calculatePNL(currentPrice, entryPrice, unitsTraded);
-//   console.log("Sell order placed at " + currentPrice + " with PNL of " + pnl);
-//   entryPrice = 0;
-//   unitsTraded = 0;
-//   // } else {
-//   // console.log("No units to sell");
-//   // }
-
-//   return pnl ?? 0;
-// }
-
-// async function executeSignal(signal) {
-//   if (signal === "buy" && !holding) {
-//     const currentPrice = await getCurrentPrice(symbol);
-//     placeBuyOrder(currentPrice, 1);
-//     console.log("Executing buy signal...");
-//     holding = true;
-//   } else if (signal === "sell" && holding) {
-//     const currentPrice = await getCurrentPrice(symbol);
-//     totalPNL += placeSellOrder(currentPrice);
-//     console.log("Executing sell signal...");
-//     console.log("totalPNL..." + totalPNL);
-//     holding = false;
-//   } else {
-//     // console.log("Holding position...");
-//   }
-// }
+}, 3000);

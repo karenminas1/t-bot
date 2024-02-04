@@ -5,20 +5,12 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "if pgrep -x \"node\" > /dev/null; then killall node; fi; node src/bot.js",
-    "pm2-reload": "pm2 reload src/bot.js",
-    "pm2-start": "pm2 start src/bot.js",
-    "pm2-stop": "pm2 stop src/bot.js",
-    "pm2-restart": "pm2 restart src/bot.js",
-    "pm2-log": "pm2 monit src/bot.js",
-    "pm2-start-or-reload": "pm2 show src/bot.js | pm2 start src/bot.js || pm2 reload src/bot.js"
+    "start": "node src/bot.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ccxt": "^2.6.36",
-    "ejs": "^3.1.8",
-    "pm2": "^5.2.2"
+    "dotenv": "^16.3.2",
+    "node-binance-api": "^0.13.1"
   }
 }
