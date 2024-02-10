@@ -8,15 +8,10 @@ const binance = new Binance().options({
   APIKEY: apiKey,
   APISECRET: apiSecret,
   test: true,
+  family: 4,
 });
 
 // Configuration
-// const symbol = "BTCUSDT";
-// const stepSizePercent = 2;
-// const firstOrderStopLossPercent = 1;
-// const subsequentOrderStopLossPercent = 0.5;
-// const maxOpenTrades = 10;
-// const orderAmount = 0.004;
 const symbol = process.env.SYMBOL;
 const stepSizePercent = process.env.STEP_SIZE_PERCENT;
 const firstOrderStopLossPercent = process.env.FIRST_ORDER_STOP_LOSS_PERCENT;
@@ -26,7 +21,6 @@ const maxOpenTrades = process.env.MAX_ORDER_TRADES;
 const orderAmount = process.env.ORDER_AMOUNT;
 
 let lastOrderPrice = null;
-let stopLossLevel = null;
 let orderCount = 0;
 
 // Utility functions
@@ -57,22 +51,7 @@ async function placeStopLossOrder(symbol, quantity, stopPrice) {
   }
 }
 
-// Function to fetch position
-async function fetchPosition(symbol) {
-  try {
-    const account = await binance.futuresAccount();
-    const position = account.positions.find((pos) => pos.symbol === symbol);
-
-    return position;
-  } catch (error) {
-    console.error("Error position:", error.body);
-  }
-}
-
-function cutToSingleDecimal(value) {
-  return Math.floor(value * 10) / 10;
-}
-
+// Function to cancel all futures orders for a position
 async function cancelAllFuturesOrders(symbol) {
   try {
     const response = await binance.futuresCancelAll(symbol);
@@ -85,69 +64,108 @@ async function cancelAllFuturesOrders(symbol) {
   }
 }
 
-async function checkAndExecuteTrades() {
+// Function to fetch position
+async function fetchPosition(symbol) {
   try {
-    const tickerPrices = await binance.futuresPrices();
-    const tickerPrice = tickerPrices[symbol];
+    const positions = await binance.futuresPositionRisk();
+    const position = positions.find(
+      (pos) => pos.symbol === symbol && parseFloat(pos.positionAmt) !== 0
+    );
 
-    const position = await fetchPosition(symbol);
-    if (position.positionAmt !== "0.000") {
-      orderCount++;
-      lastOrderPrice = +position.entryPrice;
-    } else {
-      orderCount = 0;
-      lastOrderPrice = null;
-      lastOrderPrice = null;
-    }
+    return position;
+  } catch (error) {
+    console.error("Error position:", error.body);
+  }
+}
 
-    if (orderCount === 0) {
-      console.log(`Game started`);
+function cutToSingleDecimal(value) {
+  return Math.floor(value * 10) / 10;
+}
+
+binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
+  if (orderCount === 0) {
+    console.log(`Game started`);
+    await placeNewOrder(symbol, orderAmount);
+  } else if (orderCount < maxOpenTrades) {
+    if (
+      lastOrderPrice &&
+      tickerPrice >=
+        lastOrderPrice + priceToPercent(stepSizePercent, lastOrderPrice)
+    ) {
       await placeNewOrder(symbol, orderAmount);
-      const position = await fetchPosition(symbol);
+    }
+  }
+});
+
+// Define your callback functions
+const marginCallCallback = (data) => {
+  console.log("Margin Call Data:", "data");
+};
+
+const accountUpdateCallback = async (data) => {
+  const positions = data.updateData.positions.filter(
+    (position) =>
+      position.symbol === symbol && parseFloat(position.positionAmount) !== 0
+  );
+
+  if (positions.length) {
+    const position = positions[0];
+    if (orderCount === 0) {
       const entryPrice = +position.entryPrice;
 
-      stopLossLevel =
+      const stopLossLevel =
         entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice);
 
       await placeStopLossOrder(
         symbol,
-        position.positionAmt,
+        position.positionAmount,
         cutToSingleDecimal(stopLossLevel)
       );
 
       lastOrderPrice = entryPrice;
+      orderCount++;
       console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
-    } else if (orderCount < maxOpenTrades) {
-      if (
-        tickerPrice >=
-        lastOrderPrice + priceToPercent(stepSizePercent, lastOrderPrice)
-      ) {
-        await placeNewOrder(symbol, orderAmount);
-        const position = await fetchPosition(symbol);
-        const entryPrice = +position.entryPrice;
+    } else {
+      const entryPrice = +position.entryPrice;
 
-        stopLossLevel =
-          entryPrice -
-          priceToPercent(subsequentOrderStopLossPercent, entryPrice);
-        await cancelAllFuturesOrders(symbol);
-        await placeStopLossOrder(
-          symbol,
-          position.positionAmt,
-          cutToSingleDecimal(stopLossLevel)
-        );
-        lastOrderPrice = entryPrice;
-        console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
-      }
+      const stopLossLevel =
+        entryPrice - priceToPercent(subsequentOrderStopLossPercent, entryPrice);
+      await cancelAllFuturesOrders(symbol);
+      await placeStopLossOrder(
+        symbol,
+        position.positionAmount,
+        cutToSingleDecimal(stopLossLevel)
+      );
+      lastOrderPrice = entryPrice;
+      orderCount++;
+      console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
     }
-  } catch (error) {
-    console.error(error);
   }
-}
+};
 
-setInterval(async () => {
-  try {
-    await checkAndExecuteTrades();
-  } catch (error) {
-    console.error(error);
+const orderUpdateCallback = (data) => {
+  console.log("Order Update Data:", "data");
+};
+
+const subscribedCallback = async (endpoint) => {
+  const position = await fetchPosition(symbol);
+  if (position) {
+    orderCount = [position].length;
+    lastOrderPrice = +position.entryPrice;
+  } else {
+    orderCount = 0;
+    lastOrderPrice = null;
   }
-}, 3000);
+
+  console.log(
+    `Subscribed to futures user data stream at endpoint: ${endpoint}`
+  );
+};
+
+// Subscribe to futures user data stream
+binance.websockets.userFutureData(
+  marginCallCallback,
+  accountUpdateCallback,
+  orderUpdateCallback,
+  subscribedCallback
+);
