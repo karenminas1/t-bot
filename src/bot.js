@@ -7,8 +7,9 @@ const apiSecret = process.env.BINANCE_API_SECRET;
 const binance = new Binance().options({
   APIKEY: apiKey,
   APISECRET: apiSecret,
-  test: true,
-  family: 4,
+  // test: true,
+  reconnect: true,
+  family: 6,
 });
 
 // Configuration
@@ -22,6 +23,7 @@ const orderAmount = process.env.ORDER_AMOUNT;
 
 let lastOrderPrice = null;
 let orderCount = 0;
+let isSubscribed = false;
 
 // Utility functions
 const priceToPercent = (percent, price) => (price * percent) / 100;
@@ -55,10 +57,8 @@ async function placeStopLossOrder(symbol, quantity, stopPrice) {
 async function cancelAllFuturesOrders(symbol) {
   try {
     const response = await binance.futuresCancelAll(symbol);
-    console.log(
-      "All futures orders for the symbol have been canceled:",
-      response
-    );
+
+    return response;
   } catch (error) {
     console.error("Error canceling all futures orders:", error.body);
   }
@@ -82,24 +82,13 @@ function cutToSingleDecimal(value) {
   return Math.floor(value * 10) / 10;
 }
 
-binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
-  if (orderCount === 0) {
-    console.log(`Game started`);
-    await placeNewOrder(symbol, orderAmount);
-  } else if (orderCount < maxOpenTrades) {
-    if (
-      lastOrderPrice &&
-      tickerPrice >=
-        lastOrderPrice + priceToPercent(stepSizePercent, lastOrderPrice)
-    ) {
-      await placeNewOrder(symbol, orderAmount);
-    }
-  }
-});
-
 // Define your callback functions
 const marginCallCallback = (data) => {
   console.log("Margin Call Data:", "data");
+};
+
+const orderUpdateCallback = (data) => {
+  // console.log("Order Update Data:", "data");
 };
 
 const accountUpdateCallback = async (data) => {
@@ -109,54 +98,74 @@ const accountUpdateCallback = async (data) => {
   );
 
   if (positions.length) {
+    console.log("🚀 ~ accountUpdateCallback ~ positions true:", positions);
     const position = positions[0];
-    if (orderCount === 0) {
-      const entryPrice = +position.entryPrice;
+    try {
+      if (orderCount === 0) {
+        console.log("🚀 ~ if orderCount", orderCount);
+        const entryPrice = +position.entryPrice;
+        lastOrderPrice = entryPrice;
+        orderCount++;
 
-      const stopLossLevel =
-        entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice);
+        const stopLossLevel =
+          entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice);
 
-      await placeStopLossOrder(
-        symbol,
-        position.positionAmount,
-        cutToSingleDecimal(stopLossLevel)
-      );
+        await placeStopLossOrder(
+          symbol,
+          position.positionAmount,
+          cutToSingleDecimal(stopLossLevel)
+        );
 
-      lastOrderPrice = entryPrice;
-      orderCount++;
-      console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
-    } else {
-      const entryPrice = +position.entryPrice;
+        console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
+      } else {
+        console.log("🚀 ~ else orderCount", orderCount);
+        const entryPrice = +position.entryPrice;
+        lastOrderPrice = entryPrice;
+        orderCount++;
 
-      const stopLossLevel =
-        entryPrice - priceToPercent(subsequentOrderStopLossPercent, entryPrice);
-      await cancelAllFuturesOrders(symbol);
-      await placeStopLossOrder(
-        symbol,
-        position.positionAmount,
-        cutToSingleDecimal(stopLossLevel)
-      );
-      lastOrderPrice = entryPrice;
-      orderCount++;
-      console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
+        const stopLossLevel =
+          entryPrice -
+          priceToPercent(subsequentOrderStopLossPercent, entryPrice);
+
+        await cancelAllFuturesOrders(symbol);
+        await placeStopLossOrder(
+          symbol,
+          position.positionAmount,
+          cutToSingleDecimal(stopLossLevel)
+        );
+
+        console.log(`open order: ${entryPrice} stop loss: ${stopLossLevel}`);
+      }
+    } catch (error) {
+      console.error("Error in accountUpdateCallback:", error);
+      // Handle the error as needed
     }
+  } else {
+    console.log("🚀 ~ accountUpdateCallback ~ positions false:", positions);
+    orderCount = 0;
+    lastOrderPrice = null;
+    console.log("🚀 ~ orderCount", orderCount);
   }
-};
-
-const orderUpdateCallback = (data) => {
-  console.log("Order Update Data:", "data");
 };
 
 const subscribedCallback = async (endpoint) => {
-  const position = await fetchPosition(symbol);
-  if (position) {
-    orderCount = [position].length;
-    lastOrderPrice = +position.entryPrice;
-  } else {
-    orderCount = 0;
-    lastOrderPrice = null;
+  try {
+    const position = await fetchPosition(symbol);
+    if (position) {
+      console.log("🚀 ~ subscribedCallback ~ position true:", position);
+      orderCount = [position].length;
+      lastOrderPrice = +position.entryPrice;
+    } else {
+      console.log("🚀 ~ subscribedCallback ~ position false:", position);
+      orderCount = 0;
+      lastOrderPrice = null;
+    }
+  } catch (error) {
+    console.error("Error fetching position:", error);
+    // Handle the error as needed
   }
 
+  isSubscribed = true;
   console.log(
     `Subscribed to futures user data stream at endpoint: ${endpoint}`
   );
@@ -169,3 +178,32 @@ binance.websockets.userFutureData(
   orderUpdateCallback,
   subscribedCallback
 );
+
+binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
+  if (isSubscribed) {
+    try {
+      if (orderCount === 0) {
+        console.log("first order");
+        await placeNewOrder(symbol, orderAmount);
+      } else if (orderCount < maxOpenTrades) {
+        if (
+          lastOrderPrice &&
+          tickerPrice >=
+            lastOrderPrice + priceToPercent(stepSizePercent, lastOrderPrice)
+        ) {
+          console.log(
+            "rest orders",
+            "lastOrderPrice:",
+            lastOrderPrice,
+            "tickerPrice:",
+            tickerPrice
+          );
+          await placeNewOrder(symbol, orderAmount);
+        }
+      }
+    } catch (error) {
+      console.error("Error placing new order:", error);
+      // Handle the error as needed
+    }
+  }
+});
