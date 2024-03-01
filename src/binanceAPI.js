@@ -88,7 +88,8 @@ class BinanceAPI {
     orderUpdateCallback
   ) {
     try {
-      this.#listenKey = await this.#_generateListenKey("futures");
+      // Generate a listen key for the futures user data stream
+      this.#listenKey = await this.#generateListenKey("futures");
       if (!this.#listenKey) {
         throw new Error(
           "Failed to generate listen key for futures user data stream."
@@ -99,8 +100,10 @@ class BinanceAPI {
 
       let ws;
       let reconnectAttempts = 0;
+      let pingInterval;
 
       const connect = () => {
+        console.log("Connecting to WebSocket...");
         ws = new WebSocket(wsUrl);
 
         ws.on("open", () => {
@@ -110,6 +113,9 @@ class BinanceAPI {
             }`
           );
           reconnectAttempts = 0;
+
+          pingInterval = this.#setupPingPong(ws);
+          pingInterval.startPing();
         });
 
         ws.on("message", (data) => {
@@ -135,6 +141,10 @@ class BinanceAPI {
         });
 
         ws.on("close", () => {
+          if (pingInterval & pingInterval.startPing) {
+            clearInterval(pingInterval.startPing());
+          }
+
           if (
             this.#reconnect &&
             reconnectAttempts < this.#maxReconnectAttempts
@@ -238,8 +248,9 @@ class BinanceAPI {
     };
   }
 
-  async #_generateListenKey(type, retries = 0) {
+  async #generateListenKey(type, retries = 0) {
     try {
+      // Generate a new listen key by making a POST request to the Binance API
       const response = await axios.post(
         `${this.#urls[type].base}${this.#urls[type].listenKey}`,
         {},
@@ -249,7 +260,8 @@ class BinanceAPI {
       );
       const listenKey = response.data.listenKey;
       console.log(`${type.toUpperCase()} listen key generated:`, listenKey);
-      this.#_renewListenKey(type, listenKey);
+      // Renew the listen key periodically
+      this.#renewListenKey(type, listenKey);
       return listenKey;
     } catch (error) {
       console.error(
@@ -262,8 +274,8 @@ class BinanceAPI {
             this.#maxListenKeyRetries
           })...`
         );
-        await this.#_delay(this.#listenKeyRetryInterval);
-        return this.#_generateListenKey(type, retries + 1);
+        await this.#delay(this.#listenKeyRetryInterval);
+        return this.#generateListenKey(type, retries + 1);
       } else {
         throw new Error(
           `Max retries for ${type} listen key generation exceeded.`
@@ -272,9 +284,10 @@ class BinanceAPI {
     }
   }
 
-  #_renewListenKey(type, listenKey, retries = 0) {
+  #renewListenKey(type, listenKey, retries = 0) {
     const renewInterval = setInterval(async () => {
       try {
+        // Renew the listen key by making a PUT request to the Binance API
         await axios.put(
           `${this.#urls[type].base}${this.#urls[type].listenKey}`,
           {},
@@ -303,11 +316,41 @@ class BinanceAPI {
           );
         }
       }
-    }, 30 * 60 * 1000); // Renew every 30 minutes
+    }, 15 * 60 * 1000); // Renew every 15 minutes
+
+    // Close WebSocket connection and generate a new listen key every 24 hours
+    setInterval(async () => {
+      console.log("Renewing listen key...");
+      ws.close();
+      this.#listenKey = await this.#generateListenKey("futures");
+    }, 24 * 60 * 60 * 1000); // 24 hours
   }
 
-  #_delay(ms) {
+  #delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  #setupPingPong(ws, intervalMinutes = 3) {
+    let pingInterval;
+
+    const startPing = () => {
+      pingInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          console.log("Sending ping...");
+          ws.ping();
+        }
+      }, intervalMinutes * 60 * 1000); // Convert minutes to milliseconds
+    };
+
+    const stopPing = () => {
+      clearInterval(pingInterval);
+    };
+
+    ws.on("pong", () => {
+      console.log("Received pong");
+    });
+
+    return { startPing, stopPing };
   }
 }
 
