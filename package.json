@@ -5,7 +5,13 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/bot.js"
+    "start": "node src/bot.js",
+    "pm2start": "pm2 start src/bot.js --name future-bot",
+    "pm2stop": "pm2 stop future-bot",
+    "pm2restart": "pm2 restart future-bot",
+    "pm2logs": "pm2 logs future-bot",
+    "pm2delete": "pm2 delete future-bot",
+    "pm2save": "pm2 save"
   },
   "author": "",
   "license": "ISC",
@@ -14,6 +20,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.3.2",
     "node-binance-api": "^0.13.1",
+    "pm2": "^5.3.1",
     "ws": "^8.16.0"
   }
 }
