@@ -13,65 +13,73 @@ class BinanceAPI {
   #listenKeyRetryInterval;
   #environment;
 
+  // Define default options
+  static defaultOptions = {
+    recvWindow: 5000,
+    hedgeMode: false,
+  };
+
+  static defaultUrls = {
+    production: {
+      base: "https://api.binance.com/api/",
+      wapi: "https://api.binance.com/wapi/",
+      sapi: "https://api.binance.com/sapi/",
+      futures: {
+        base: "https://fapi.binance.com",
+        fapi: "https://fapi.binance.com/fapi/",
+        listenKey: "/fapi/v1/listenKey",
+        wsBase: "wss://fstream.binance.com/ws/",
+        fstream: "wss://fstream.binance.com/stream?streams=",
+      },
+      spot: {
+        base: "https://api.binance.com",
+        listenKey: "/api/v3/userDataStream",
+        wsBase: "wss://stream.binance.com:9443/ws/",
+      },
+      fstream: "wss://fstream.binance.com/stream?streams=",
+      fstreamSingle: "wss://fstream.binance.com/ws/",
+      fstreamSingleTest: "wss://stream.binancefuture.com/ws/",
+      fstreamTest: "wss://stream.binancefuture.com/stream?streams=",
+      dstream: "wss://dstream.binance.com/stream?streams=",
+      dstreamSingle: "wss://dstream.binance.com/ws/",
+      dstreamSingleTest: "wss://dstream.binancefuture.com/ws/",
+      dstreamTest: "wss://dstream.binancefuture.com/stream?streams=",
+      stream: "wss://stream.binance.com:9443/ws/",
+      combineStream: "wss://stream.binance.com:9443/stream?streams=",
+    },
+    testnet: {
+      base: "https://testnet.binancefuture.com/fapi/",
+      wapi: "https://testnet.binancefuture.com/wapi/",
+      sapi: "https://testnet.binancefuture.com/sapi/",
+      futures: {
+        base: "https://testnet.binancefuture.com/fapi/",
+        listenKey: "/fapi/v1/listenKey",
+        wsBase: "wss://stream.binancefuture.com/ws/",
+      },
+      spot: {
+        base: "https://testnet.binancefuture.com/dapi/",
+        listenKey: "/dapi/v1/listenKey",
+        wsBase: "wss://dstream.binancefuture.com/ws/",
+      },
+      fstream: "wss://fstream.binance.com/stream?streams=",
+      fstreamSingle: "wss://fstream.binance.com/ws/",
+      fstreamSingleTest: "wss://stream.binancefuture.com/ws/",
+      fstreamTest: "wss://stream.binancefuture.com/stream?streams=",
+      dstream: "wss://dstream.binance.com/stream?streams=",
+      dstreamSingle: "wss://dstream.binance.com/ws/",
+      dstreamSingleTest: "wss://dstream.binancefuture.com/ws/",
+      dstreamTest: "wss://dstream.binancefuture.com/stream?streams=",
+      stream: "wss://stream.binance.com:9443/ws/",
+      combineStream: "wss://stream.binance.com:9443/stream?streams=",
+    },
+  };
   constructor(config) {
     this.#apiKey = config.APIKEY;
     this.#apiSecret = config.APISECRET;
-    const defaultUrls = {
-      production: {
-        base: "https://api.binance.com/api/",
-        wapi: "https://api.binance.com/wapi/",
-        sapi: "https://api.binance.com/sapi/",
-        futures: {
-          base: "https://fapi.binance.com",
-          listenKey: "/fapi/v1/listenKey",
-          wsBase: "wss://fstream.binance.com/ws/",
-          fstream: "wss://fstream.binance.com/stream?streams=",
-        },
-        spot: {
-          base: "https://api.binance.com",
-          listenKey: "/api/v3/userDataStream",
-          wsBase: "wss://stream.binance.com:9443/ws/",
-        },
-        fstream: "wss://fstream.binance.com/stream?streams=",
-        fstreamSingle: "wss://fstream.binance.com/ws/",
-        fstreamSingleTest: "wss://stream.binancefuture.com/ws/",
-        fstreamTest: "wss://stream.binancefuture.com/stream?streams=",
-        dstream: "wss://dstream.binance.com/stream?streams=",
-        dstreamSingle: "wss://dstream.binance.com/ws/",
-        dstreamSingleTest: "wss://dstream.binancefuture.com/ws/",
-        dstreamTest: "wss://dstream.binancefuture.com/stream?streams=",
-        stream: "wss://stream.binance.com:9443/ws/",
-        combineStream: "wss://stream.binance.com:9443/stream?streams=",
-      },
-      testnet: {
-        base: "https://testnet.binancefuture.com/fapi/",
-        wapi: "https://testnet.binancefuture.com/wapi/",
-        sapi: "https://testnet.binancefuture.com/sapi/",
-        futures: {
-          base: "https://testnet.binancefuture.com/fapi/",
-          listenKey: "/fapi/v1/listenKey",
-          wsBase: "wss://stream.binancefuture.com/ws/",
-        },
-        spot: {
-          base: "https://testnet.binancefuture.com/dapi/",
-          listenKey: "/dapi/v1/listenKey",
-          wsBase: "wss://dstream.binancefuture.com/ws/",
-        },
-        fstream: "wss://fstream.binance.com/stream?streams=",
-        fstreamSingle: "wss://fstream.binance.com/ws/",
-        fstreamSingleTest: "wss://stream.binancefuture.com/ws/",
-        fstreamTest: "wss://stream.binancefuture.com/stream?streams=",
-        dstream: "wss://dstream.binance.com/stream?streams=",
-        dstreamSingle: "wss://dstream.binance.com/ws/",
-        dstreamSingleTest: "wss://dstream.binancefuture.com/ws/",
-        dstreamTest: "wss://dstream.binancefuture.com/stream?streams=",
-        stream: "wss://stream.binance.com:9443/ws/",
-        combineStream: "wss://stream.binance.com:9443/stream?streams=",
-      },
-    };
+
     this.#environment = config.environment || "production"; // Default to production, can be testnet or sandbox
     this.#urls = {
-      ...defaultUrls[this.#environment],
+      ...BinanceAPI.defaultUrls[this.#environment],
       ...(config[this.#environment]?.urls || {}),
     };
     this.#reconnect = config.reconnect || false;
@@ -137,12 +145,11 @@ class BinanceAPI {
 
         ws.on("error", (error) => {
           console.error(`WebSocket error: ${error.message}`);
-          throw error;
         });
 
         ws.on("close", () => {
-          if (pingInterval & pingInterval.startPing) {
-            clearInterval(pingInterval.startPing());
+          if (pingInterval && pingInterval.stopPing) {
+            pingInterval.stopPing();
           }
 
           if (
@@ -156,12 +163,6 @@ class BinanceAPI {
             );
             setTimeout(connect, this.#reconnectDelay);
             reconnectAttempts++;
-          } else if (this.#reconnect) {
-            throw new Error(
-              `Failed to reconnect after ${
-                this.#maxReconnectAttempts
-              } attempts.`
-            );
           } else {
             console.log("WebSocket closed without reconnection.");
           }
@@ -302,28 +303,33 @@ class BinanceAPI {
           `Error renewing ${type} listen key:`,
           error.response?.data || error.message
         );
-        if (retries < this.#maxListenKeyRetries) {
+        console.log(
+          "🚀 error.response?.data?.code",
+          error.response?.data?.code,
+          typeof error.response?.data?.code
+        );
+        if (
+          error.response?.data?.code === "-1125" ||
+          retries >= this.#maxListenKeyRetries
+        ) {
+          // Listen key does not exist or max retries exceeded, generate a new listen key
+          console.log("Regenerating listen key...");
+          this.#listenKey = await this.#generateListenKey(type);
+          if (!this.#listenKey) {
+            clearInterval(renewInterval);
+            throw new Error("Failed to regenerate listen key.");
+          }
+          retries = 0; // Reset retries after successful regeneration
+        } else {
           console.log(
             `Retrying ${type} listen key renewal (${retries + 1}/${
               this.#maxListenKeyRetries
             })...`
           );
           retries++;
-        } else {
-          clearInterval(renewInterval);
-          throw new Error(
-            `Max retries for ${type} listen key renewal exceeded.`
-          );
         }
       }
     }, 15 * 60 * 1000); // Renew every 15 minutes
-
-    // Close WebSocket connection and generate a new listen key every 24 hours
-    setInterval(async () => {
-      console.log("Renewing listen key...");
-      ws.close();
-      this.#listenKey = await this.#generateListenKey("futures");
-    }, 24 * 60 * 60 * 1000); // 24 hours
   }
 
   #delay(ms) {
@@ -351,6 +357,231 @@ class BinanceAPI {
     });
 
     return { startPing, stopPing };
+  }
+
+  async #futuresOrder(side, symbol, quantity, params = {}) {
+    const endpoint = "v1/order";
+    const data = {
+      symbol: symbol.toUpperCase(),
+      side: side.toUpperCase(),
+      quantity: quantity,
+      timestamp: Date.now(),
+      ...params,
+    };
+
+    // Set order type
+    if (!data.type) {
+      data.type = params.price ? "LIMIT" : "MARKET";
+    }
+
+    // Set time in force for limit orders
+    if (!data.timeInForce && data.type === "LIMIT") {
+      data.timeInForce = "GTC"; // Good Till Cancelled
+    }
+
+    // Set position side for hedge mode
+    if (options.hedgeMode && !data.positionSide) {
+      data.positionSide = side === "BUY" ? "LONG" : "SHORT";
+    }
+
+    const signature = this.#sign(data);
+    const response = await axios.post(
+      `${this.#urls.futures.fapi}${endpoint}`,
+      null,
+      {
+        headers: {
+          "X-MBX-APIKEY": this.#apiKey,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        params: {
+          ...data,
+          signature: signature,
+        },
+      }
+    );
+
+    return response.data;
+  }
+
+  async futuresMarketBuy(symbol, quantity, params = {}) {
+    return this.#futuresOrder("BUY", symbol, quantity, {
+      ...params,
+      type: "MARKET",
+    });
+  }
+
+  async futuresMarketSell(symbol, quantity, params = {}) {
+    return this.#futuresOrder("SELL", symbol, quantity, {
+      ...params,
+      type: "MARKET",
+    });
+  }
+
+  async futuresLimitBuy(symbol, quantity, price, params = {}) {
+    return this.#futuresOrder("BUY", symbol, quantity, {
+      ...params,
+      type: "LIMIT",
+      price: price,
+    });
+  }
+
+  async futuresLimitSell(symbol, quantity, price, params = {}) {
+    return this.#futuresOrder("SELL", symbol, quantity, {
+      ...params,
+      type: "LIMIT",
+      price: price,
+    });
+  }
+
+  async futuresStopLossSell(symbol, quantity, stopPrice, params = {}) {
+    return this.futuresOrder("SELL", symbol, quantity, {
+      ...params,
+      type: "STOP_MARKET",
+      stopPrice: stopPrice,
+    });
+  }
+
+  async futuresStopLossBuy(symbol, quantity, stopPrice, params = {}) {
+    return this.futuresOrder("BUY", symbol, quantity, {
+      ...params,
+      type: "STOP_MARKET",
+      stopPrice: stopPrice,
+    });
+  }
+
+  async futuresTakeProfitSell(symbol, quantity, price, params = {}) {
+    return this.futuresOrder("SELL", symbol, quantity, {
+      ...params,
+      type: "TAKE_PROFIT_MARKET",
+      stopPrice: price,
+    });
+  }
+
+  async futuresTakeProfitBuy(symbol, quantity, price, params = {}) {
+    return this.futuresOrder("BUY", symbol, quantity, {
+      ...params,
+      type: "TAKE_PROFIT_MARKET",
+      stopPrice: price,
+    });
+  }
+
+  async futuresCancel(symbol, orderId) {
+    const endpoint = "v1/order";
+    const data = {
+      symbol: symbol.toUpperCase(),
+      orderId: orderId,
+      timestamp: Date.now(),
+    };
+
+    const signature = this.#sign(data);
+    const response = await axios.delete(
+      `${this.#urls.futures.fapi}${endpoint}`,
+      {
+        headers: {
+          "X-MBX-APIKEY": this.#apiKey,
+        },
+        params: {
+          ...data,
+          signature: signature,
+        },
+      }
+    );
+
+    return response.data;
+  }
+
+  async futuresCancelAll(symbol) {
+    const endpoint = "v1/allOpenOrders";
+    const data = {
+      symbol: symbol.toUpperCase(),
+      timestamp: Date.now(),
+    };
+
+    const signature = this.#sign(data);
+    const response = await axios.delete(
+      `${this.#urls.futures.fapi}${endpoint}`,
+      {
+        headers: {
+          "X-MBX-APIKEY": this.#apiKey,
+        },
+        params: {
+          ...data,
+          signature: signature,
+        },
+      }
+    );
+
+    return response.data;
+  }
+
+  async futuresPositionRisk(symbol = null) {
+    const endpoint = "v2/positionRisk";
+    const data = {
+      timestamp: Date.now(),
+    };
+
+    if (symbol) {
+      data.symbol = symbol.toUpperCase();
+    }
+
+    const signature = this.#sign(data);
+    const response = await axios.get(`${this.#urls.futures.fapi}${endpoint}`, {
+      headers: {
+        "X-MBX-APIKEY": this.#apiKey,
+      },
+      params: {
+        ...data,
+        signature: signature,
+      },
+    });
+
+    return response.data;
+  }
+
+  #sign(data) {
+    const queryString = Object.keys(data)
+      .map((key) => `${key}=${data[key]}`)
+      .join("&");
+    return crypto
+      .createHmac("sha256", this.#apiSecret)
+      .update(queryString)
+      .digest("hex");
+  }
+
+  async #promiseRequest(endpoint, data = {}, flags = {}) {
+    return new Promise(async (resolve, reject) => {
+      let headers = {
+        "User-Agent": "BinanceAPI",
+        "Content-type": "application/x-www-form-urlencoded",
+      };
+
+      if (flags.type === "SIGNED") {
+        data.timestamp = Date.now();
+        const queryString = this.#makeQueryString(data);
+        data.signature = this.#sign(data);
+        endpoint += `?${queryString}&signature=${data.signature}`;
+      }
+
+      const url = `${this.#urls.futures.fapi}${endpoint}`;
+      try {
+        const response = await axios({
+          method: flags.method || "GET",
+          url: url,
+          headers: headers,
+          params: data,
+          timeout: options.recvWindow,
+        });
+        resolve(response.data);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  #makeQueryString(data) {
+    return Object.keys(data)
+      .map((key) => `${key}=${data[key]}`)
+      .join("&");
   }
 }
 

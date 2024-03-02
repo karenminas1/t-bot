@@ -1,7 +1,7 @@
 import "dotenv/config";
 import BinanceAPI from "./binanceAPI.js";
 
-// import Binance from "node-binance-api";
+import Binance from "node-binance-api";
 
 const apiKey = process.env.BINANCE_API_KEY;
 const apiSecret = process.env.BINANCE_API_SECRET;
