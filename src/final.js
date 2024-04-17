@@ -10,7 +10,7 @@ const server = http.createServer((req, res) => {
     })
   );
 });
-server.listen(3000);
+server.listen(process.env.PORT);
 
 const apiKey = process.env.BINANCE_API_KEY;
 const apiSecret = process.env.BINANCE_API_SECRET;
