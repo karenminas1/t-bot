@@ -1,5 +1,16 @@
 import "dotenv/config";
 import Binance from "node-binance-api";
+import http from "http";
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(
+    JSON.stringify({
+      data: "Hello World!",
+    })
+  );
+});
+server.listen(3000);
 
 const apiKey = process.env.BINANCE_API_KEY;
 const apiSecret = process.env.BINANCE_API_SECRET;
