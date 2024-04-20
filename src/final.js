@@ -12,6 +12,10 @@ const server = http.createServer((req, res) => {
 });
 server.listen(process.env.PORT);
 
+setTimeout(() => {
+  fetch("https://t-bot.onrender.com/");
+}, 10000);
+
 const apiKey = process.env.BINANCE_API_KEY;
 const apiSecret = process.env.BINANCE_API_SECRET;
 
