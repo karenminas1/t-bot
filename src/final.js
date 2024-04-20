@@ -33,22 +33,8 @@ const maxOpenTrades = process.env.MAX_ORDER_TRADES;
 const orderAmount = process.env.ORDER_AMOUNT;
 
 let lastOrderPrice = null;
+let stopLossPrice = null;
 let orderCount = 0;
-let isSubscribed = false;
-
-// // Utility functions
-const priceToPercent = (percent, price) => (price * percent) / 100;
-
-// // Function to place a new order
-async function placeNewOrder(symbol, quantity) {
-  try {
-    const order = await binance.futuresMarketBuy(symbol, quantity);
-
-    return order;
-  } catch (error) {
-    console.error("Error placing order:", error.body);
-  }
-}
 
 // // Function to add a stop loss to an existing order
 async function placeStopLossOrder(symbol, quantity, stopPrice) {
@@ -61,17 +47,6 @@ async function placeStopLossOrder(symbol, quantity, stopPrice) {
     return stopLossOrder;
   } catch (error) {
     console.error("Error placing stop-loss order:", error.body);
-  }
-}
-
-// Function to cancel all futures orders for a position
-async function cancelAllFuturesOrders(symbol) {
-  try {
-    const response = await binance.futuresCancelAll(symbol);
-
-    return response;
-  } catch (error) {
-    console.error("Error canceling all futures orders:", error.body);
   }
 }
 
@@ -93,24 +68,26 @@ function cutToSingleDecimal(value) {
   return Math.floor(value * 10) / 10;
 }
 
+// // Utility functions
+const priceToPercent = (percent, price) => (price * percent) / 100;
+
 function calculateNumberOfOrders(positionAmt, ORDER_AMOUNT) {
   return Math.ceil(positionAmt / ORDER_AMOUNT);
 }
 
 binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
-  // if (orderCount === null) {
-  //   const position = await fetchPosition(symbol);
-  //   if (position) {
-  //     lastOrderPrice = +position.entryPrice;
-  //     orderCount = calculateNumberOfOrders(position.positionAmt, orderAmount);
-  //     console.log("🚀 ~ orderCount === null:", orderCount);
-  //   } else {
-  //     orderCount = 0;
-  //     lastOrderPrice = null;
-  //   }
-  // }
-
   try {
+    if (tickerPrice && stopLossPrice && tickerPrice <= stopLossPrice) {
+      const position = await fetchPosition(symbol);
+
+      if (!position) {
+        orderCount = 0;
+        lastOrderPrice = null;
+        stopLossPrice = null;
+        console.log("stop loss triggered:", stopLossPrice);
+      }
+    }
+
     if (orderCount === 0) {
       await binance.futuresMarketBuy(symbol, orderAmount);
       const position = await fetchPosition(symbol);
@@ -119,18 +96,15 @@ binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
       lastOrderPrice = entryPrice;
       orderCount++;
 
-      const stopLossLevel =
-        entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice);
-
-      await placeStopLossOrder(
-        symbol,
-        position.positionAmt,
-        cutToSingleDecimal(stopLossLevel)
+      stopLossPrice = cutToSingleDecimal(
+        entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice)
       );
+
+      await placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
 
       console.log(
         "orderCount === 0:",
-        `open order: ${entryPrice} stop loss: ${stopLossLevel}`
+        `open order: ${entryPrice} stop loss: ${stopLossPrice}`
       );
     } else if (orderCount < maxOpenTrades) {
       if (
@@ -145,20 +119,17 @@ binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
         lastOrderPrice = entryPrice;
         orderCount++;
 
-        const stopLossLevel =
+        stopLossPrice = cutToSingleDecimal(
           entryPrice -
-          priceToPercent(subsequentOrderStopLossPercent, entryPrice);
-
-        await cancelAllFuturesOrders(symbol);
-        await placeStopLossOrder(
-          symbol,
-          position.positionAmt,
-          cutToSingleDecimal(stopLossLevel)
+            priceToPercent(subsequentOrderStopLossPercent, entryPrice)
         );
+
+        await binance.futuresCancelAll(symbol);
+        await placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
 
         console.log(
           "orderCount > 0:",
-          `open order: ${entryPrice} stop loss: ${stopLossLevel}`
+          `open order: ${entryPrice} stop loss: ${stopLossPrice}`
         );
       }
     }
