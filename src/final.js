@@ -98,10 +98,14 @@ async function handleStopLoss() {
 async function initialOrder() {
   try {
     asyncInProgress = true;
-    await binance.futuresMarketBuy(symbol, orderAmount);
-    const position = await fetchPosition(symbol);
-    console.log(position);
-    const entryPrice = +position.entryPrice;
+    const [buyResponse, position] = await Promise.all([
+      binance.futuresMarketBuy(symbol, orderAmount),
+      fetchPosition(symbol),
+    ]);
+    console.log("🚀 ~ initialOrder ~ position:", position);
+    console.log("🚀 ~ initialOrder ~ buyResponse:", buyResponse);
+
+    const entryPrice = +position.breakEvenPrice;
     lastOrderPrice = entryPrice;
     orderCount++;
 
