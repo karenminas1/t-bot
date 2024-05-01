@@ -64,9 +64,7 @@ async function fetchPosition(symbol) {
   }
 }
 
-function cutToSingleDecimal(value) {
-  return Math.floor(value * 10) / 10;
-}
+const cutToSingleDecimal = (value) => value.toFixed(2);
 
 // // Utility functions
 const priceToPercent = (percent, price) => (price * percent) / 100;
@@ -110,8 +108,9 @@ async function initialOrder() {
     lastOrderPrice = entryPrice;
     orderCount++;
 
-    stopLossPrice =
-      entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice);
+    stopLossPrice = cutToSingleDecimal(
+      entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice)
+    );
 
     await placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
 
