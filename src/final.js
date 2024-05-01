@@ -98,9 +98,11 @@ async function initialOrder() {
     asyncInProgress = true;
     await binance.futuresMarketBuy(symbol, orderAmount);
     const position = await fetchPosition(symbol);
-    console.log("🚀 ~ initialOrder ~ position:", position);
+
     if (!position) {
       orderCount = 0;
+      lastOrderPrice = null;
+      stopLossPrice = null;
       return;
     }
 
@@ -131,7 +133,14 @@ async function subsequentOrder() {
     await binance.futuresMarketBuy(symbol, orderAmount);
     const position = await fetchPosition(symbol);
 
-    const entryPrice = +position.entryPrice;
+    if (!position) {
+      orderCount = 0;
+      lastOrderPrice = null;
+      stopLossPrice = null;
+      return;
+    }
+
+    const entryPrice = +position.breakEvenPrice;
     lastOrderPrice = entryPrice;
     orderCount++;
 
