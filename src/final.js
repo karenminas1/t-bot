@@ -110,9 +110,8 @@ async function initialOrder() {
     lastOrderPrice = entryPrice;
     orderCount++;
 
-    stopLossPrice = cutToSingleDecimal(
-      entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice)
-    );
+    stopLossPrice =
+      entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice);
 
     await placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
 
