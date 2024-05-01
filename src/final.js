@@ -100,7 +100,7 @@ async function initialOrder() {
     asyncInProgress = true;
     await binance.futuresMarketBuy(symbol, orderAmount);
     const position = await fetchPosition(symbol);
-
+    console.log(position);
     const entryPrice = +position.entryPrice;
     lastOrderPrice = entryPrice;
     orderCount++;
