@@ -86,6 +86,7 @@ async function handleStopLoss() {
       stopLossPrice = null;
       console.log("stop loss triggered:", stopLossPrice);
     }
+    // todo maybe need to cancel all orders here in else condition
   } catch (error) {
     console.error("Error processing stop loss:", error);
   } finally {
@@ -114,7 +115,12 @@ async function initialOrder() {
       entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice)
     );
 
-    await placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
+    const stopLossOrder = await placeStopLossOrder(
+      symbol,
+      position.positionAmt,
+      stopLossPrice
+    );
+    console.log("🚀 ~ initialOrder ~ stopLossOrder:", stopLossOrder);
 
     console.log(
       "orderCount === 0:",
