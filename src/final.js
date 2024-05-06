@@ -32,6 +32,7 @@ const subsequentOrderStopLossPercent =
 const maxOpenTrades = process.env.MAX_ORDER_TRADES;
 const orderAmount = process.env.ORDER_AMOUNT;
 
+let asyncInProgress = false;
 let lastOrderPrice = null;
 let stopLossPrice = null;
 let orderCount = 0;
@@ -73,74 +74,34 @@ function calculateNumberOfOrders(positionAmt, ORDER_AMOUNT) {
   return Math.ceil(positionAmt / ORDER_AMOUNT);
 }
 
-let asyncInProgress = false;
-
-async function initialOrder() {
+async function getOrdersAndPosition(symbol, orderAmount) {
   try {
-    asyncInProgress = true;
-    await binance.futuresMarketBuy(symbol, orderAmount);
-    const position = await fetchPosition(symbol);
+    const [position, openOrders] = await Promise.all([
+      fetchPosition(symbol),
+      binance.futuresOpenOrders(symbol),
+    ]);
 
-    if (!position) {
-      orderCount = 0;
-      lastOrderPrice = null;
-      stopLossPrice = null;
-      return;
+    // Find the stop market sell order
+    const stopMarketSellOrder = openOrders.find(
+      (order) => order.origType === "STOP_MARKET" && order.side === "SELL"
+    );
+
+    // Calculate number of orders, last order price, and stop loss price
+    if (position && stopMarketSellOrder) {
+      const orderCount = calculateNumberOfOrders(
+        position.positionAmt,
+        orderAmount
+      );
+      const lastOrderPrice = position.entryPrice;
+      const stopLossPrice = stopMarketSellOrder.stopPrice;
+
+      return { orderCount, lastOrderPrice, stopLossPrice };
+    } else {
+      return { orderCount: 0, lastOrderPrice: null, stopLossPrice: null };
     }
-
-    const entryPrice = +position.breakEvenPrice;
-    lastOrderPrice = entryPrice;
-    orderCount++;
-
-    stopLossPrice = cutToSingleDecimal(
-      entryPrice - priceToPercent(firstOrderStopLossPercent, entryPrice)
-    );
-
-    await placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
-
-    console.log(
-      "orderCount === 0:",
-      `open order: ${entryPrice} stop loss: ${stopLossPrice}`
-    );
   } catch (error) {
-    console.error("Error placing initial order:", error);
-  } finally {
-    asyncInProgress = false;
-  }
-}
-
-async function subsequentOrder() {
-  try {
-    asyncInProgress = true;
-    await binance.futuresMarketBuy(symbol, orderAmount);
-    const position = await fetchPosition(symbol);
-
-    if (!position) {
-      orderCount = 0;
-      lastOrderPrice = null;
-      stopLossPrice = null;
-      return;
-    }
-
-    const entryPrice = +position.breakEvenPrice;
-    lastOrderPrice = entryPrice;
-    orderCount++;
-
-    stopLossPrice = cutToSingleDecimal(
-      entryPrice - priceToPercent(subsequentOrderStopLossPercent, entryPrice)
-    );
-
-    await binance.futuresCancelAll(symbol);
-    await placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
-
-    console.log(
-      "orderCount > 0:",
-      `open order: ${entryPrice} stop loss: ${stopLossPrice}`
-    );
-  } catch (error) {
-    console.error("Error placing second order:", error);
-  } finally {
-    asyncInProgress = false;
+    console.error("Error:", error);
+    throw error;
   }
 }
 
@@ -149,7 +110,14 @@ async function handleStopLoss() {
     const position = await fetchPosition(symbol);
 
     if (position) {
-      await binance.futuresCancelAll(symbol);
+      const sellPromise = binance.futuresMarketSell(
+        symbol,
+        position.positionAmt
+      );
+      const cancelPromise = binance.futuresCancelAll(symbol);
+
+      // Execute both promises concurrently
+      await Promise.all([sellPromise, cancelPromise]);
     }
 
     orderCount = 0;
@@ -159,6 +127,8 @@ async function handleStopLoss() {
   } catch (error) {
     console.error("Error processing stop loss:", error);
     throw error; // Re-throw the error to be handled by the caller
+  } finally {
+    asyncInProgress = false;
   }
 }
 
@@ -231,6 +201,18 @@ const handleOpenOrder = async (
   }
 };
 
+try {
+  const res = await getOrdersAndPosition(symbol, orderAmount);
+
+  lastOrderPrice = res.lastOrderPrice;
+  stopLossPrice = res.stopLossPrice;
+  orderCount = res.orderCount;
+} catch (error) {
+  lastOrderPrice = null;
+  stopLossPrice = null;
+  orderCount = 0;
+}
+
 // Subscribe to the futuresMiniTickerStream
 binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
   try {
@@ -242,7 +224,6 @@ binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
     ) {
       asyncInProgress = true;
       await handleStopLoss();
-      asyncInProgress = false;
     } else if (!asyncInProgress && orderCount === 0) {
       asyncInProgress = true;
       await handleOpenOrder(symbol, orderAmount, firstOrderStopLossPercent);
@@ -259,7 +240,8 @@ binance.futuresMiniTickerStream(symbol, async ({ close: tickerPrice }) => {
       await handleOpenOrder(
         symbol,
         orderAmount,
-        subsequentOrderStopLossPercent
+        subsequentOrderStopLossPercent,
+        false
       );
       asyncInProgress = false;
     }
