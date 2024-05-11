@@ -170,15 +170,15 @@ await binance.futuresMarketBuy(symbol, orderAmount);
 // Fetch position information
 const position = await fetchPosition(symbol);
 
+const orderPrice = +position.breakEvenPrice;
 const stopLossPrice = cutToSingleDecimal(
-  position.breakEvenPrice -
-    priceToPercent(firstOrderStopLossPercent, position.breakEvenPrice)
+  orderPrice - priceToPercent(firstOrderStopLossPercent, orderPrice)
 );
 
 placeStopLossOrder(symbol, position.positionAmt, stopLossPrice);
 
 // Example usage:
-const startPrice = +position.breakEvenPrice; // Starting price
+const startPrice = orderPrice; // Starting price
 const numberOfOrders = maxOpenTrades; // Number of orders to generate
 const quantity = orderAmount; // Quantity for each order
 const incrementPercentage = stepSizePercent; // Percentage increase or decrease
